@@ -32,6 +32,8 @@
   const OUTLINE_TITLE_ID = "ai-chat-exporter-outline-title";
   const OUTPUT_FILE_FORMAT_DEFAULT = "{platform}_{title}_{timestampLocal}";
   const GM_OUTPUT_FILE_FORMAT = "aiChatExporter_fileFormat";
+  const MAIN_TOGGLE_BUTTON_ID = "ai-chat-exporter-toggle-btn";
+  const UI_VISIBLE_STATE_KEY = "ai_chat_exporter_ui_visible";
 
   // --- Font Stack for UI Elements ---
   const FONT_STACK = `system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"`;
@@ -41,7 +43,7 @@
   const COMMON_CONTROL_PROPS = {
     position: "fixed",
     bottom: "20px",
-    right: "20px",
+    right: "80px", // Shifted left to make room for toggle button
     zIndex: "9999",
     boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
     fontSize: "14px",
@@ -56,7 +58,7 @@
   const OUTLINE_CONTAINER_PROPS = {
     position: "fixed",
     bottom: "70px", // Position above the export buttons
-    right: "20px",
+    right: "80px", // Shifted left to make room for toggle button
     zIndex: "9998", // Below buttons, above general content
     boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
     fontSize: "12px", // Smaller font for outline
@@ -81,6 +83,27 @@
     padding: "5px 10px",
     overflow: "hidden",
     opacity: "0.9",
+  };
+
+  const TOGGLE_BUTTON_PROPS = {
+    position: "fixed",
+    bottom: "20px",
+    right: "20px",
+    zIndex: "10000", // Above everything
+    padding: "0",
+    backgroundColor: "#5b3f87",
+    color: "white",
+    border: "none",
+    cursor: "pointer",
+    borderRadius: "8px", // Match other buttons
+    width: "40px",
+    height: "40px",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    fontSize: "20px",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+    fontFamily: FONT_STACK,
   };
 
   const OUTLINE_HEADER_PROPS = {
@@ -1557,6 +1580,7 @@
      */
     alertTimeoutId: null,
     _outlineIsCollapsed: false, // State for the outline collapse
+    _uiVisible: true, // State for global UI visibility
     _lastProcessedChatUrl: null, // Track the last processed chat URL for Gemini
     _initialListenersAttached: false, // Track if the URL change handlers are initialized
 
@@ -1604,6 +1628,104 @@
     },
 
     /**
+     * Adds the main toggle button to the page.
+     */
+    addMainToggleControl() {
+      if (document.querySelector(`#${MAIN_TOGGLE_BUTTON_ID}`)) return;
+
+      const toggleBtn = document.createElement("button");
+      toggleBtn.id = MAIN_TOGGLE_BUTTON_ID;
+      toggleBtn.title = "Toggle AI Chat Exporter UI";
+      Utils.applyStyles(toggleBtn, TOGGLE_BUTTON_PROPS);
+
+      const createSvgIcon = (type) => {
+        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.setAttribute("width", "24");
+        svg.setAttribute("height", "24");
+        svg.setAttribute("viewBox", "0 0 24 24");
+        svg.setAttribute("fill", "none");
+        svg.setAttribute("stroke", "currentColor");
+        svg.setAttribute("stroke-width", "2");
+        svg.setAttribute("stroke-linecap", "round");
+        svg.setAttribute("stroke-linejoin", "round");
+
+        if (type === "open") {
+          // Chat Bubble with Download Arrow Icon
+          const bubble = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          bubble.setAttribute("d", "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z");
+          svg.appendChild(bubble);
+
+          const arrowHead = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+          arrowHead.setAttribute("points", "8 10 12 14 16 10");
+          svg.appendChild(arrowHead);
+
+          const arrowLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+          arrowLine.setAttribute("x1", "12");
+          arrowLine.setAttribute("y1", "6");
+          arrowLine.setAttribute("x2", "12");
+          arrowLine.setAttribute("y2", "14");
+          svg.appendChild(arrowLine);
+        } else {
+          // X Icon (Close)
+          const line1 = document.createElementNS("http://www.w3.org/2000/svg", "line");
+          line1.setAttribute("x1", "18");
+          line1.setAttribute("y1", "6");
+          line1.setAttribute("x2", "6");
+          line1.setAttribute("y2", "18");
+          svg.appendChild(line1);
+          const line2 = document.createElementNS("http://www.w3.org/2000/svg", "line");
+          line2.setAttribute("x1", "6");
+          line2.setAttribute("y1", "6");
+          line2.setAttribute("x2", "18");
+          line2.setAttribute("y2", "18");
+          svg.appendChild(line2);
+        }
+        return svg;
+      };
+
+      const updateState = () => {
+        const isVisible = UIManager._uiVisible;
+        
+        // Clear existing content
+        while (toggleBtn.firstChild) {
+          toggleBtn.removeChild(toggleBtn.firstChild);
+        }
+
+        // Append new icon
+        toggleBtn.appendChild(createSvgIcon(isVisible ? "close" : "open"));
+
+        const exportContainer = document.querySelector(`#${EXPORT_CONTAINER_ID}`);
+        if (exportContainer) {
+          exportContainer.style.display = isVisible ? "flex" : "none";
+        }
+
+        const outlineContainer = document.querySelector(
+          `#${OUTLINE_CONTAINER_ID}`
+        );
+        if (outlineContainer) {
+          if (!isVisible) {
+            outlineContainer.style.display = "none";
+          } else {
+             // If visible, we need to defer to the outline's own logic (it might be empty)
+             UIManager.generateOutlineContent();
+          }
+        }
+      };
+
+      toggleBtn.onclick = () => {
+        UIManager._uiVisible = !UIManager._uiVisible;
+        localStorage.setItem(
+          UI_VISIBLE_STATE_KEY,
+          UIManager._uiVisible.toString()
+        );
+        updateState();
+      };
+
+      document.body.appendChild(toggleBtn);
+      updateState(); // Apply initial state
+    },
+
+    /**
      * Adds the export buttons to the current page.
      */
     addExportControls() {
@@ -1614,6 +1736,11 @@
       const container = document.createElement("div");
       container.id = EXPORT_CONTAINER_ID;
       Utils.applyStyles(container, COMMON_CONTROL_PROPS);
+      
+      // Respect initial visibility
+      if (!UIManager._uiVisible) {
+        container.style.display = "none";
+      }
 
       const markdownButton = document.createElement("button");
       markdownButton.id = "export-markdown-btn";
@@ -1718,6 +1845,12 @@
       );
       if (!outlineContainer) return;
 
+      // Check global visibility first
+      if (!UIManager._uiVisible) {
+        outlineContainer.style.display = "none";
+        return;
+      }
+
       // Extract fresh chat data
       let freshChatData = null;
       switch (CURRENT_PLATFORM) {
@@ -1757,8 +1890,13 @@
 
       if (!hasDataChanged) {
         // If data hasn't changed, just ensure visibility based on message presence
-        outlineContainer.style.display =
-          freshChatData && freshChatData.messages.length > 0 ? "flex" : "none";
+        // AND global visibility (checked at start, but double check here logic flow)
+        if (UIManager._uiVisible) {
+             outlineContainer.style.display =
+                freshChatData && freshChatData.messages.length > 0 ? "flex" : "none";
+        } else {
+            outlineContainer.style.display = "none";
+        }
         return; // No need to regenerate content
       }
 
@@ -1768,7 +1906,8 @@
       // Hide if no messages after update
       if (
         !ChatExporter._currentChatData ||
-        ChatExporter._currentChatData.messages.length === 0
+        ChatExporter._currentChatData.messages.length === 0 ||
+        !UIManager._uiVisible 
       ) {
         outlineContainer.style.display = "none";
         return;
@@ -2532,6 +2671,10 @@
      */
     initObserver() {
       const observer = new MutationObserver((mutations) => {
+        // Ensure main toggle button is present
+        if (!document.querySelector(`#${MAIN_TOGGLE_BUTTON_ID}`)) {
+          UIManager.addMainToggleControl();
+        }
         // Only re-add export controls if they are missing
         if (!document.querySelector(`#${EXPORT_CONTAINER_ID}`)) {
           UIManager.addExportControls();
@@ -2634,6 +2777,11 @@
       );
       UIManager._outlineIsCollapsed = storedCollapsedState === "true";
 
+      // New: Read UI visibility state from localStorage on init (default to false)
+      const storedUiVisible = localStorage.getItem(UI_VISIBLE_STATE_KEY);
+      // If key exists, use it. If not, default to false (invisible).
+      UIManager._uiVisible = storedUiVisible === "true";
+
       // Add controls after DOM is ready
       if (
         document.readyState === "complete" ||
@@ -2642,6 +2790,7 @@
         // console.log("DOM is ready (complete or interactive). Setting timeout for UI controls.");
         setTimeout(() => {
           // console.log("Timeout elapsed. Adding export and outline controls.");
+          UIManager.addMainToggleControl(); // Always add toggle button
           UIManager.addExportControls();
           UIManager.addOutlineControls(); // Add outline after buttons
           // New: Initiate auto-scroll for Gemini after controls are set up
@@ -2658,6 +2807,7 @@
         window.addEventListener("DOMContentLoaded", () =>
           setTimeout(() => {
             // console.log("DOMContentLoaded event fired. Adding export and outline controls after timeout.");
+            UIManager.addMainToggleControl(); // Always add toggle button
             UIManager.addExportControls();
             UIManager.addOutlineControls(); // Add outline after buttons
             // New: Initiate auto-scroll for Gemini after controls are set up
