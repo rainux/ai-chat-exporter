@@ -379,7 +379,7 @@
         str = str.toLocaleLowerCase();
       }
       return str
-        .replace(/[^a-zA-Z0-9\-_.+]+/g, "-")
+        .replace(/[^\p{L}\p{N}\-_.+]+/gu, "-") // Supports Unicode (letters & numbers)
         .replace(/-+/g, "-")
         .replace(/^-|-$/g, "")
         .replace(/^$/, "invalid-filename")
